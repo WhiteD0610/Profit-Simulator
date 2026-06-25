@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>商品原価計算ツール</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {}
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        }
+        .calc-preview {
+            transition: all 0.2s ease;
+        }
+        .input-highlight {
+            animation: flash 0.3s ease;
+        }
+        @keyframes flash {
+            0% { background-color: #e0e7ff; }
+            100% { background-color: white; }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-slate-100">
+    <div class="min-h-screen p-4 sm:p-6">
+        <div class="max-w-7xl mx-auto">
+            <!-- ヘッダー -->
+            <div class="mb-6">
+                <h1 class="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">商品原価計算ツール</h1>
+                <p class="text-slate-600 mt-2">販売価格と原価から、利益と損益分岐点を自動計算します</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 左側：入力フォーム -->
+                <div class="lg:col-span-1">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <h2 class="text-lg font-semibold text-slate-900 mb-5">商品情報</h2>
+
+                        <div class="space-y-4">
+                            <!-- 項目名 -->
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">項目名 <span class="text-red-500">*</span></label>
+                                <input type="text" id="name" placeholder="例：Tシャツ、ケーキ" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+
+                            <!-- 販売価格 -->
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">販売価格（税込）<span class="text-red-500">*</span></label>
+                                <div class="relative">
+                                    <input type="number" id="sellingPrice" placeholder="0" step="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-8" oninput="updatePreview()">
+                                    <span class="absolute right-3 top-2.5 text-slate-500">円</span>
+                                </div>
+                            </div>
+
+                            <!-- 追加オプション料金 -->
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">追加オプション料金</label>
+                                <div class="relative">
+                                    <input type="number" id="optionPrice" placeholder="0" step="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-8" oninput="updatePreview()">
+                                    <span class="absolute right-3 top-2.5 text-slate-500">円</span>
+                                </div>
+                            </div>
+
+                            <!-- 区切り線：材料原価セクション -->
+                            <div class="border-t border-slate-200 pt-3">
+                                <p class="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-3">📦 材料原価</p>
+
+                                <!-- 1袋の仕入れ値と個数 -->
+                                <div class="bg-indigo-50 rounded-lg p-3 space-y-3 border border-indigo-100">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1">1袋（箱）の仕入れ値 <span class="text-red-500">*</span></label>
+                                        <div class="relative">
+                                            <input type="number" id="bagPrice" placeholder="0" step="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-8 bg-white" oninput="calcUnitCost()">
+                                            <span class="absolute right-3 top-2.5 text-slate-500">円</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1">1袋あたりの個数 <span class="text-red-500">*</span></label>
+                                        <div class="relative">
+                                            <input type="number" id="bagCount" placeholder="0" step="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-8 bg-white" oninput="calcUnitCost()">
+                                            <span class="absolute right-3 top-2.5 text-slate-500">個</span>
+                                        </div>
+                                    </div>
+                                    <!-- 1個あたり原価（自動計算・表示のみ） -->
+                                    <div class="bg-white rounded-lg px-3 py-2 border border-indigo-200 flex items-center justify-between">
+                                        <span class="text-sm text-slate-600">1個あたり原価</span>
+                                        <span class="font-bold text-indigo-700 text-base" id="unitCostPreview">— 円</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 区切り線：容器セクション -->
+                            <div class="border-t border-slate-200 pt-3">
+                                <p class="text-xs font-semibold text-teal-600 uppercase tracking-wide mb-3">🧴 容器・包材</p>
+
+                                <div class="bg-teal-50 rounded-lg p-3 space-y-3 border border-teal-100">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1">容器など 仕入れ個数</label>
+                                        <div class="relative">
+                                            <input type="number" id="containerCount" placeholder="100" step="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 pr-8 bg-white" oninput="calcContainerUnit()">
+                                            <span class="absolute right-3 top-2.5 text-slate-500">個</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1">容器など ロット仕入れ値 <span class="text-red-500">*</span></label>
+                                        <div class="relative">
+                                            <input type="number" id="containerPrice" placeholder="0" step="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 pr-8 bg-white" oninput="calcContainerUnit()">
+                                            <span class="absolute right-3 top-2.5 text-slate-500">円</span>
+                                        </div>
+                                    </div>
+                                    <!-- 容器1個あたり単価（自動計算） -->
+                                    <div class="bg-white rounded-lg px-3 py-2 border border-teal-200 flex items-center justify-between">
+                                        <span class="text-sm text-slate-600">容器1個あたり単価</span>
+                                        <span class="font-bold text-teal-700 text-base" id="containerUnitPreview">— 円</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 設備費等 -->
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">設備費・固定費 <span class="text-xs text-slate-400">（損益分岐点に使用）</span></label>
+                                <div class="relative">
+                                    <input type="number" id="equipmentCost" placeholder="0" step="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-8" oninput="updatePreview()">
+                                    <span class="absolute right-3 top-2.5 text-slate-500">円</span>
+                                </div>
+                            </div>
+
+                            <!-- 販売予想個数 -->
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">販売予想個数 <span class="text-xs text-slate-400">（利益計算に使用）</span></label>
+                                <div class="relative">
+                                    <input type="number" id="forecastQuantity" placeholder="0" step="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-8" oninput="updatePreview()">
+                                    <span class="absolute right-3 top-2.5 text-slate-500">個</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- リアルタイムプレビュー -->
+                        <div id="livePreview" class="hidden mt-5 bg-slate-50 rounded-lg p-3 border border-slate-200 calc-preview">
+                            <p class="text-xs font-semibold text-slate-500 mb-2">🔢 リアルタイム試算</p>
+                            <div class="space-y-1 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-600">総原価（1個）</span>
+                                    <span class="font-semibold text-slate-800" id="previewTotalCost">—</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-600">粗利（1個）</span>
+                                    <span class="font-semibold" id="previewProfit">—</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-600">原価率</span>
+                                    <span class="font-semibold" id="previewCostRate">—</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button id="calcBtn" class="w-full mt-5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors text-base">
+                            試算して履歴に保存
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 右側：結果と履歴 -->
+                <div class="lg:col-span-2 space-y-6">
+                    <!-- 計算結果 -->
+                    <div id="resultsContainer" class="hidden">
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                            <h2 class="text-lg font-semibold text-slate-900 mb-5">計算結果：<span id="resultName" class="text-indigo-700"></span></h2>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                                <!-- 原価率 -->
+                                <div class="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200">
+                                    <p class="text-sm text-orange-700 font-medium">原価率</p>
+                                    <p class="text-2xl sm:text-3xl font-bold text-orange-600 mt-2 break-words" id="costRateResult">0%</p>
+                                </div>
+
+                                <!-- 損益分岐点 -->
+                                <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+                                    <p class="text-sm text-blue-700 font-medium">損益分岐点</p>
+                                    <p class="text-2xl sm:text-3xl font-bold text-blue-600 mt-2 break-words" id="breakEvenResult">0</p>
+                                    <p class="text-xs text-blue-600 mt-1">個</p>
+                                </div>
+
+                                <!-- 利益 -->
+                                <div id="profitContainer" class="hidden bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+                                    <p class="text-sm text-green-700 font-medium">予想利益</p>
+                                    <p class="text-2xl sm:text-3xl font-bold text-green-600 mt-2 break-words" id="profitResult">¥0</p>
+                                </div>
+                            </div>
+
+                            <!-- 詳細情報 -->
+                            <div class="pt-4 border-t border-slate-200">
+                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                                    <div>
+                                        <p class="text-slate-500 text-xs">販売価格（税込）</p>
+                                        <p class="font-semibold text-slate-900" id="detailSelling">¥0</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-slate-500 text-xs">1個あたり材料原価</p>
+                                        <p class="font-semibold text-slate-900" id="detailUnitCost">¥0</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-slate-500 text-xs">容器1個あたり単価</p>
+                                        <p class="font-semibold text-slate-900" id="detailContainerUnit">¥0</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-slate-500 text-xs">1個あたり総原価</p>
+                                        <p class="font-semibold text-indigo-700" id="detailCost">¥0</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 履歴一覧 -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-lg font-semibold text-slate-900">計算履歴 (<span id="historyCount">0</span>)</h2>
+                            <button id="clearAllBtn" class="hidden text-sm text-slate-500 hover:text-red-600 transition-colors border border-slate-200 hover:border-red-300 px-3 py-1 rounded-lg">すべて削除</button>
+                        </div>
+
+                        <div id="historyList" class="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                            <p class="text-center text-slate-500 py-8">計算履歴がありません</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let history = [];
+
+        // ローカルストレージから履歴を読み込む
+        function loadHistory() {
+            try {
+                const saved = localStorage.getItem('profitCalculatorHistory_v2');
+                if (saved) {
+                    history = JSON.parse(saved);
+                    renderHistory();
+                }
+            } catch (e) {
+                console.error('履歴の読み込みエラー:', e);
+            }
+        }
+
+        // 履歴をローカルストレージに保存
+        function saveHistory() {
+            try {
+                localStorage.setItem('profitCalculatorHistory_v2', JSON.stringify(history));
+            } catch (e) {
+                console.error('履歴の保存エラー:', e);
+            }
+        }
+
+        // 1個あたり原価を自動計算して表示
+        function calcUnitCost() {
+            const bagPrice = parseFloat(document.getElementById('bagPrice').value) || 0;
+            const bagCount = parseFloat(document.getElementById('bagCount').value) || 0;
+            const previewEl = document.getElementById('unitCostPreview');
+
+            if (bagPrice > 0 && bagCount > 0) {
+                const unitCost = bagPrice / bagCount;
+                previewEl.textContent = unitCost % 1 === 0
+                    ? unitCost.toLocaleString() + ' 円'
+                    : unitCost.toFixed(2) + ' 円';
+                previewEl.classList.add('text-indigo-700');
+            } else {
+                previewEl.textContent = '— 円';
+            }
+            updatePreview();
+        }
+
+        // 容器1個あたり単価を自動計算して表示
+        function calcContainerUnit() {
+            const containerCount = parseFloat(document.getElementById('containerCount').value) || 0;
+            const containerPrice = parseFloat(document.getElementById('containerPrice').value) || 0;
+            const previewEl = document.getElementById('containerUnitPreview');
+
+            if (containerPrice > 0 && containerCount > 0) {
+                const unit = containerPrice / containerCount;
+                previewEl.textContent = unit % 1 === 0
+                    ? unit.toLocaleString() + ' 円'
+                    : unit.toFixed(2) + ' 円';
+            } else if (containerPrice > 0) {
+                previewEl.textContent = containerPrice.toLocaleString() + ' 円（個数未入力）';
+            } else {
+                previewEl.textContent = '— 円';
+            }
+            updatePreview();
+        }
+
+        // リアルタイムプレビュー更新
+        function updatePreview() {
+            const sellingPrice = parseFloat(document.getElementById('sellingPrice').value) || 0;
+            const optionPrice = parseFloat(document.getElementById('optionPrice').value) || 0;
+            const bagPrice = parseFloat(document.getElementById('bagPrice').value) || 0;
+            const bagCount = parseFloat(document.getElementById('bagCount').value) || 0;
+            const containerCount = parseFloat(document.getElementById('containerCount').value) || 0;
+            const containerPrice = parseFloat(document.getElementById('containerPrice').value) || 0;
+
+            const unitCost = (bagPrice > 0 && bagCount > 0) ? bagPrice / bagCount : 0;
+            const containerUnit = (containerPrice > 0 && containerCount > 0) ? containerPrice / containerCount : containerPrice;
+
+            const totalSelling = sellingPrice + optionPrice;
+            const totalCost = unitCost + containerUnit;
+
+            const previewEl = document.getElementById('livePreview');
+
+            if (totalSelling > 0 || totalCost > 0) {
+                previewEl.classList.remove('hidden');
+                const profitPerUnit = totalSelling - totalCost;
+                const costRate = totalSelling > 0 ? (totalCost / totalSelling * 100) : 0;
+
+                document.getElementById('previewTotalCost').textContent = '¥' + totalCost.toFixed(2);
+                const profitEl = document.getElementById('previewProfit');
+                profitEl.textContent = (profitPerUnit >= 0 ? '+' : '') + '¥' + profitPerUnit.toFixed(2);
+                profitEl.className = 'font-semibold ' + (profitPerUnit >= 0 ? 'text-green-600' : 'text-red-600');
+                document.getElementById('previewCostRate').textContent = costRate.toFixed(1) + '%';
+            } else {
+                previewEl.classList.add('hidden');
+            }
+        }
+
+        // 試算ボタンの処理
+        document.getElementById('calcBtn').addEventListener('click', function() {
+            const name = document.getElementById('name').value.trim();
+            const sellingPrice = parseFloat(document.getElementById('sellingPrice').value) || 0;
+            const optionPrice = parseFloat(document.getElementById('optionPrice').value) || 0;
+            const bagPrice = parseFloat(document.getElementById('bagPrice').value) || 0;
+            const bagCount = parseFloat(document.getElementById('bagCount').value) || 0;
+            const containerCount = parseFloat(document.getElementById('containerCount').value) || 0;
+            const containerPrice = parseFloat(document.getElementById('containerPrice').value) || 0;
+            const equipmentCost = parseFloat(document.getElementById('equipmentCost').value) || 0;
+            const forecastQuantity = parseFloat(document.getElementById('forecastQuantity').value) || 0;
+
+            // バリデーション
+            if (!name) {
+                alert('項目名を入力してください');
+                document.getElementById('name').focus();
+                return;
+            }
+            if (!sellingPrice) {
+                alert('販売価格を入力してください');
+                document.getElementById('sellingPrice').focus();
+                return;
+            }
+            if (!bagPrice || !bagCount) {
+                alert('材料の仕入れ値と袋あたりの個数を入力してください');
+                document.getElementById('bagPrice').focus();
+                return;
+            }
+
+            // 計算
+            const unitCost = bagPrice / bagCount;
+            const containerUnit = (containerPrice > 0 && containerCount > 0)
+                ? containerPrice / containerCount
+                : containerPrice;
+
+            const totalSelling = sellingPrice + optionPrice;
+            const totalCostPerUnit = unitCost + containerUnit;
+            const costRate = (totalCostPerUnit / totalSelling) * 100;
+            const profitPerUnit = totalSelling - totalCostPerUnit;
+            const breakEvenPoint = (equipmentCost > 0 && profitPerUnit > 0) ? Math.ceil(equipmentCost / profitPerUnit) : 0;
+
+            let profit = null;
+            if (forecastQuantity > 0) {
+                profit = (profitPerUnit * forecastQuantity) - equipmentCost;
+            }
+
+            // 結果を表示
+            document.getElementById('resultName').textContent = name;
+            document.getElementById('costRateResult').textContent = costRate.toFixed(1) + '%';
+            document.getElementById('breakEvenResult').textContent = breakEvenPoint > 0 ? breakEvenPoint.toLocaleString() : '—';
+            document.getElementById('detailSelling').textContent = '¥' + totalSelling.toLocaleString();
+            document.getElementById('detailUnitCost').textContent = '¥' + unitCost.toFixed(2);
+            document.getElementById('detailContainerUnit').textContent = '¥' + containerUnit.toFixed(2);
+            document.getElementById('detailCost').textContent = '¥' + totalCostPerUnit.toFixed(2);
+
+            if (profit !== null) {
+                document.getElementById('profitContainer').classList.remove('hidden');
+                const isPositive = profit >= 0;
+                document.getElementById('profitContainer').className =
+                    'bg-gradient-to-br ' + (isPositive ? 'from-green-50 to-green-100 border-green-200' : 'from-red-50 to-red-100 border-red-200') + ' rounded-lg p-4 border';
+                document.getElementById('profitResult').className =
+                    'text-2xl sm:text-3xl font-bold mt-2 break-words ' + (isPositive ? 'text-green-600' : 'text-red-600');
+                document.getElementById('profitResult').textContent = '¥' + parseInt(profit).toLocaleString();
+                document.getElementById('profitContainer').querySelector('p').textContent = isPositive ? '予想利益' : '予想損失';
+            } else {
+                document.getElementById('profitContainer').classList.add('hidden');
+            }
+
+            document.getElementById('resultsContainer').classList.remove('hidden');
+            document.getElementById('resultsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            // 履歴に保存（全フィールド保存）
+            const result = {
+                id: Date.now(),
+                timestamp: new Date().toLocaleString('ja-JP'),
+                name,
+                selling: sellingPrice,
+                option: optionPrice,
+                bagPrice,
+                bagCount,
+                unitCost: unitCost.toFixed(4),
+                containerCount,
+                containerPrice,
+                containerUnit: containerUnit.toFixed(4),
+                equipment: equipmentCost,
+                forecast: forecastQuantity,
+                costRate: costRate.toFixed(1),
+                breakEvenPoint,
+                profit: profit !== null ? profit.toFixed(0) : null
+            };
+            history.unshift(result);
+            saveHistory();
+            renderHistory();
+
+            // フォームをリセット
+            ['name','sellingPrice','optionPrice','bagPrice','bagCount','containerCount','containerPrice','equipmentCost','forecastQuantity'].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+            document.getElementById('unitCostPreview').textContent = '— 円';
+            document.getElementById('containerUnitPreview').textContent = '— 円';
+            document.getElementById('livePreview').classList.add('hidden');
+        });
+
+        // 履歴を表示
+        function renderHistory() {
+            const historyList = document.getElementById('historyList');
+            const clearBtn = document.getElementById('clearAllBtn');
+            document.getElementById('historyCount').textContent = history.length;
+
+            if (history.length === 0) {
+                historyList.innerHTML = '<p class="text-center text-slate-500 py-8">計算履歴がありません</p>';
+                clearBtn.classList.add('hidden');
+                return;
+            }
+
+            clearBtn.classList.remove('hidden');
+            historyList.innerHTML = history.map(item => {
+                const profitNum = item.profit !== null ? parseInt(item.profit) : null;
+                const profitColor = profitNum !== null ? (profitNum >= 0 ? 'green' : 'red') : null;
+                return `
+                <div class="border border-slate-200 rounded-lg p-4 hover:bg-indigo-50 hover:border-indigo-200 transition-colors cursor-pointer" onclick="loadFromHistory(${item.id})">
+                    <div class="flex items-start justify-between mb-2">
+                        <div>
+                            <p class="font-semibold text-slate-900">${item.name}</p>
+                            <p class="text-xs text-slate-400">${item.timestamp}</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-indigo-500 border border-indigo-200 px-2 py-0.5 rounded-full">タップで呼び出し</span>
+                            <button class="text-slate-300 hover:text-red-500 transition-colors text-lg leading-none" onclick="deleteHistory(event, ${item.id})" title="削除">×</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-sm mt-2">
+                        <div class="bg-orange-50 rounded p-2 text-center">
+                            <p class="text-orange-600 text-xs">原価率</p>
+                            <p class="font-bold text-orange-700">${item.costRate}%</p>
+                        </div>
+                        <div class="bg-blue-50 rounded p-2 text-center">
+                            <p class="text-blue-600 text-xs">損益分岐</p>
+                            <p class="font-bold text-blue-700">${item.breakEvenPoint > 0 ? item.breakEvenPoint.toLocaleString() + '個' : '—'}</p>
+                        </div>
+                        ${profitNum !== null ? `
+                        <div class="bg-${profitColor}-50 rounded p-2 text-center">
+                            <p class="text-${profitColor}-600 text-xs">${profitNum >= 0 ? '予想利益' : '予想損失'}</p>
+                            <p class="font-bold text-${profitColor}-700">¥${profitNum.toLocaleString()}</p>
+                        </div>` : '<div></div>'}
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                        <span>販売 ¥${(item.selling + (item.option||0)).toLocaleString()}</span>
+                        <span>材料原価 ¥${parseFloat(item.unitCost).toFixed(2)}/個</span>
+                        <span>容器 ¥${parseFloat(item.containerUnit||0).toFixed(2)}/個</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // 履歴から読み込む（全フィールド復元）
+        function loadFromHistory(id) {
+            const item = history.find(h => h.id === id);
+            if (!item) return;
+
+            document.getElementById('name').value = item.name || '';
+            document.getElementById('sellingPrice').value = item.selling || '';
+            document.getElementById('optionPrice').value = item.option || '';
+            document.getElementById('bagPrice').value = item.bagPrice || '';
+            document.getElementById('bagCount').value = item.bagCount || '';
+            document.getElementById('containerCount').value = item.containerCount || '';
+            document.getElementById('containerPrice').value = item.containerPrice || '';
+            document.getElementById('equipmentCost').value = item.equipment || '';
+            document.getElementById('forecastQuantity').value = item.forecast || '';
+
+            // 自動計算プレビューを更新
+            calcUnitCost();
+            calcContainerUnit();
+
+            // フォームまでスクロール
+            document.getElementById('name').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // ハイライト演出
+            document.querySelector('.bg-white.rounded-xl').classList.add('input-highlight');
+            setTimeout(() => document.querySelector('.bg-white.rounded-xl').classList.remove('input-highlight'), 400);
+        }
+
+        // 履歴を削除
+        function deleteHistory(e, id) {
+            e.stopPropagation();
+            history = history.filter(h => h.id !== id);
+            saveHistory();
+            renderHistory();
+        }
+
+        // すべての履歴を削除
+        document.getElementById('clearAllBtn').addEventListener('click', function() {
+            if (confirm('全ての履歴を削除しますか？')) {
+                history = [];
+                saveHistory();
+                renderHistory();
+            }
+        });
+
+        // 初期化
+        loadHistory();
+    </script>
+</body>
+</html>
